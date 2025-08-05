@@ -304,6 +304,14 @@ export class GdprCookieBanner extends LitElement {
     marketing: false
   };
 
+  @state()
+  private _googleConsentStatus = {
+    ad_storage: 'denied' as 'granted' | 'denied',
+    analytics_storage: 'denied' as 'granted' | 'denied',
+    ad_user_data: 'denied' as 'granted' | 'denied',
+    ad_personalization: 'denied' as 'granted' | 'denied'
+  };
+
   @property({ type: Number, attribute: 'consent-expiration-days' })
   consentExpirationDays: number = 365; // Default 12 months
 
@@ -315,6 +323,9 @@ export class GdprCookieBanner extends LitElement {
 
   @property({ type: Boolean, attribute: 'geolocation-error' })
   geolocationError: boolean = false;
+
+  @property({ type: String, attribute: 'google-consent-mode' })
+  googleConsentMode: 'basic' | 'advanced' = 'advanced';
 
   private readonly CONSENT_KEY = 'gdpr-consent';
 
@@ -385,8 +396,42 @@ export class GdprCookieBanner extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    this._initializeGoogleConsentMode();
     this._detectLanguageAndRegion();
     this._initializeConsent();
+  }
+
+  private _initializeGoogleConsentMode() {
+    try {
+      // Initialize dataLayer if it doesn't exist
+      (window as any).dataLayer = (window as any).dataLayer || [];
+
+      // Initialize gtag function if it doesn't exist
+      if (!(window as any).gtag) {
+        (window as any).gtag = function() {
+          (window as any).dataLayer.push(arguments);
+        };
+      }
+
+      // Set default consent status - all parameters denied by default
+      // Both basic and advanced mode start with denied status
+      const consentConfig = {
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied',
+        'wait_for_update': 500
+      };
+
+      (window as any).gtag('consent', 'default', consentConfig);
+    } catch (error) {
+      // Silently handle errors to not affect site functionality
+      console.warn('Google Consent Mode initialization failed:', error);
+    }
+  }
+
+  getGoogleConsentStatus() {
+    return { ...this._googleConsentStatus };
   }
 
   private _detectLanguageAndRegion() {

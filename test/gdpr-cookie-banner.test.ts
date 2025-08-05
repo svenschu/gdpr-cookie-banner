@@ -922,4 +922,141 @@ describe('GdprCookieBanner', () => {
       });
     });
   });
+
+  describe('Story 2.1 - Set Default Consent Status', () => {
+    beforeEach(() => {
+      // Clear any existing dataLayer
+      (window as any).dataLayer = [];
+      // Clear any existing gtag function
+      delete (window as any).gtag;
+    });
+
+    it('should initialize dataLayer and gtag function on component creation', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect((window as any).dataLayer).to.be.an('array');
+      expect((window as any).gtag).to.be.a('function');
+    });
+
+    it('should set default consent status to denied for all four Google parameters', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Check that gtag was called with default consent settings
+      const dataLayer = (window as any).dataLayer;
+      const consentCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'default'
+      );
+
+      expect(consentCall).to.exist;
+      expect(consentCall[2]).to.deep.include({
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+
+    it('should include wait_for_update parameter in default consent', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const dataLayer = (window as any).dataLayer;
+      const consentCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'default'
+      );
+
+      expect(consentCall[2]).to.have.property('wait_for_update');
+      expect(consentCall[2].wait_for_update).to.be.a('number');
+      expect(consentCall[2].wait_for_update).to.be.greaterThan(0);
+    });
+
+    it('should set default consent before any other Google tags are loaded', async () => {
+      // Mock a scenario where Google tags might be loaded
+      let gtagCallOrder: string[] = [];
+
+      (window as any).gtag = (...args: any[]) => {
+        if (args[0] === 'consent') {
+          gtagCallOrder.push(`consent-${args[1]}`);
+        } else {
+          gtagCallOrder.push('other-gtag-call');
+        }
+        (window as any).dataLayer.push(args);
+      };
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Simulate other gtag calls that might happen after initialization
+      (window as any).gtag('config', 'GA_MEASUREMENT_ID');
+
+      expect(gtagCallOrder[0]).to.equal('consent-default');
+    });
+
+    it('should be configurable for basic mode', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner google-consent-mode="basic"></gdpr-cookie-banner>`);
+
+      const dataLayer = (window as any).dataLayer;
+      const consentCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'default'
+      );
+
+      expect(consentCall).to.exist;
+      // In basic mode, all parameters should still be denied by default
+      expect(consentCall[2]).to.deep.include({
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+
+    it('should be configurable for advanced mode', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner google-consent-mode="advanced"></gdpr-cookie-banner>`);
+
+      const dataLayer = (window as any).dataLayer;
+      const consentCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'default'
+      );
+
+      expect(consentCall).to.exist;
+      // In advanced mode, all parameters should still be denied by default
+      expect(consentCall[2]).to.deep.include({
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+
+    it('should handle errors gracefully without affecting site functionality', async () => {
+      // Mock an error in gtag function
+      (window as any).gtag = () => {
+        throw new Error('Simulated gtag error');
+      };
+
+      let errorThrown = false;
+      try {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+        // Component should still work normally
+        expect(el.shouldShowBanner()).to.be.true;
+      } catch (error) {
+        errorThrown = true;
+      }
+
+      expect(errorThrown).to.be.false;
+    });
+
+    it('should expose method to get current Google consent status', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el).to.have.property('getGoogleConsentStatus');
+      expect(el.getGoogleConsentStatus).to.be.a('function');
+
+      const status = el.getGoogleConsentStatus();
+      expect(status).to.deep.equal({
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+  });
 });
