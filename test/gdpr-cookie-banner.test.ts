@@ -127,6 +127,152 @@ describe('GdprCookieBanner', () => {
     });
   });
 
+  describe('Story 1.6 - Consent expiration', () => {
+    it('uses default expiration period of 365 days', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el.consentExpirationDays).to.equal(365);
+    });
+
+    it('allows custom expiration period configuration', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner consent-expiration-days="180"></gdpr-cookie-banner>`);
+
+      expect(el.consentExpirationDays).to.equal(180);
+    });
+
+    it('enforces minimum expiration period of 30 days', async () => {
+      // Store consent that would be expired with a 10-day period
+      const tenDaysAgo = Date.now() - (11 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: tenDaysAgo,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner consent-expiration-days="10"></gdpr-cookie-banner>`);
+
+      // Should not show banner because minimum 30 days is enforced
+      expect(el.shouldShowBanner()).to.be.false;
+    });
+
+    it('enforces maximum expiration period of 730 days', async () => {
+      // Store consent that is 800 days old
+      const veryOldConsent = Date.now() - (800 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: veryOldConsent,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner consent-expiration-days="1000"></gdpr-cookie-banner>`);
+
+      // Should show banner because maximum 730 days is enforced
+      expect(el.shouldShowBanner()).to.be.true;
+    });
+
+    it('shows banner when consent has expired (default period)', async () => {
+      // Store consent that is 400 days old (older than default 365 days)
+      const expiredConsent = Date.now() - (400 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: expiredConsent,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el.shouldShowBanner()).to.be.true;
+      expect(el.shadowRoot!.querySelector('.banner')).to.exist;
+    });
+
+    it('shows banner when consent has expired (custom period)', async () => {
+      // Store consent that is 200 days old
+      const oldConsent = Date.now() - (200 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: oldConsent,
+        accepted: true
+      }));
+
+      // Set expiration to 180 days
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner consent-expiration-days="180"></gdpr-cookie-banner>`);
+
+      expect(el.shouldShowBanner()).to.be.true;
+      expect(el.shadowRoot!.querySelector('.banner')).to.exist;
+    });
+
+    it('does not show banner when consent is still valid', async () => {
+      // Store consent that is 100 days old (within default 365 days)
+      const validConsent = Date.now() - (100 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: validConsent,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el.shouldShowBanner()).to.be.false;
+      expect(el.shadowRoot!.querySelector('.banner')).to.not.exist;
+    });
+
+    it('blocks non-essential cookies when consent has expired', async () => {
+      // Store expired consent that was previously accepted
+      const expiredConsent = Date.now() - (400 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: expiredConsent,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el.areNonEssentialCookiesAllowed()).to.be.false;
+    });
+
+    it('removes expired consent from localStorage', async () => {
+      // Store expired consent
+      const expiredConsent = Date.now() - (400 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: expiredConsent,
+        accepted: true
+      }));
+
+      // Verify consent is stored
+      expect(localStorage.getItem('gdpr-consent')).to.not.be.null;
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // After initialization, expired consent should be removed
+      expect(localStorage.getItem('gdpr-consent')).to.be.null;
+    });
+
+    it('preserves valid consent in localStorage', async () => {
+      // Store valid consent
+      const validConsent = Date.now() - (100 * 24 * 60 * 60 * 1000);
+      const consentData = {
+        timestamp: validConsent,
+        accepted: true
+      };
+      localStorage.setItem('gdpr-consent', JSON.stringify(consentData));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Valid consent should still be in localStorage
+      const storedConsent = JSON.parse(localStorage.getItem('gdpr-consent') || '{}');
+      expect(storedConsent.timestamp).to.equal(validConsent);
+      expect(storedConsent.accepted).to.be.true;
+    });
+
+    it('handles edge case of consent exactly at expiration boundary', async () => {
+      // Store consent that is exactly 365 days old
+      const boundaryConsent = Date.now() - (365 * 24 * 60 * 60 * 1000);
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: boundaryConsent,
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Should not show banner as it's exactly at the boundary (not greater than)
+      expect(el.shouldShowBanner()).to.be.false;
+    });
+  });
+
   it('passes the a11y audit', async () => {
     const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
 

@@ -38,6 +38,7 @@ The epic includes the following user stories:
 - **[Story 1.3](user_stories/story_1.3_granular_cookie_settings.md)** – Granular cookie settings
 - **[Story 1.4](user_stories/story_1.4_withdraw_and_change_preferences.md)** – Withdraw and change preferences
 - **[Story 1.5](user_stories/story_1.5_multilingual_and_geo_targeting.md)** – Multilingual support and geo-targeting
+- **[Story 1.6](user_stories/story_1.6_consent_expiration.md)** – Consent expiration
 
 ## Technical Framework
 

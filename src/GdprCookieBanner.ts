@@ -117,6 +117,9 @@ export class GdprCookieBanner extends LitElement {
   @state()
   private _nonEssentialCookiesAllowed = false;
 
+  @property({ type: Number })
+  consentExpirationDays: number = 365; // Default 12 months
+
   private readonly CONSENT_KEY = 'gdpr-consent';
 
   connectedCallback() {
@@ -143,6 +146,17 @@ export class GdprCookieBanner extends LitElement {
         const consent = JSON.parse(stored) as ConsentData;
         // Validate the consent data structure
         if (typeof consent.timestamp === 'number' && typeof consent.accepted === 'boolean') {
+          // Check if consent has expired
+          const consentAgeInDays = (Date.now() - consent.timestamp) / (1000 * 60 * 60 * 24);
+          const expirationDays = Math.max(30, Math.min(730, this.consentExpirationDays)); // Enforce min 30, max 730 days
+
+          if (consentAgeInDays > expirationDays) {
+            // Consent has expired, remove it from storage
+            console.info('Cookie consent has expired and will be removed');
+            this._removeExpiredConsent();
+            return null;
+          }
+
           return consent;
         }
       }
@@ -150,6 +164,14 @@ export class GdprCookieBanner extends LitElement {
       console.warn('Failed to parse stored consent:', error);
     }
     return null;
+  }
+
+  private _removeExpiredConsent(): void {
+    try {
+      localStorage.removeItem(this.CONSENT_KEY);
+    } catch (error) {
+      console.error('Failed to remove expired consent:', error);
+    }
   }
 
   private _storeConsent(accepted: boolean) {
