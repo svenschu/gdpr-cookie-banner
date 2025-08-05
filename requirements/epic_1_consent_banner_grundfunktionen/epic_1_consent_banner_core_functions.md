@@ -33,12 +33,11 @@ provide EU website visitors with a transparent and user-friendly way to grant or
 
 The epic includes the following user stories:
 
-- **[Story 1.1](user_stories/story_1.1.md)** – Display banner and block cookies
-- **[Story 1.2](user_stories/story_1.2.md)** – Equivalent “Accept all” and
-  “Reject all” button
-- **[Story 1.3](user_stories/story_1.3.md)** – Granular cookie settings
-- **[Story 1.4](user_stories/story_1.4.md)** – Withdrawal and change preferences
-- **[Story 1.5](user_stories/story_1.5.md)** – Multilingual support and geo-targeting
+- **[Story 1.1](user_stories/story_1.1_display_banner_and_block_cookies.md)** – Display banner and block cookies
+- **[Story 1.2](user_stories/story_1.2_equivalent_accept_all_and_reject_all_button.md)** – Equivalent “Accept all” and “Reject all” button
+- **[Story 1.3](user_stories/story_1.3_granular_cookie_settings.md)** – Granular cookie settings
+- **[Story 1.4](user_stories/story_1.4_withdraw_and_change_preferences.md)** – Withdraw and change preferences
+- **[Story 1.5](user_stories/story_1.5_multilingual_and_geo_targeting.md)** – Multilingual support and geo-targeting
 
 ## Technical Framework
 
