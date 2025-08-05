@@ -1059,4 +1059,206 @@ describe('GdprCookieBanner', () => {
       });
     });
   });
+
+  describe('Story 2.2 - Update and Send Consent Signals', () => {
+    beforeEach(() => {
+      // Clear any existing dataLayer
+      (window as any).dataLayer = [];
+      // Clear any existing gtag function
+      delete (window as any).gtag;
+      // Clear localStorage
+      localStorage.clear();
+    });
+
+    it('should update analytics_storage to granted when analytics is accepted', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Accept all cookies
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+      acceptButton.click();
+      await el.updateComplete;
+
+      // Check that gtag was called with updated consent settings
+      const dataLayer = (window as any).dataLayer;
+      const updateCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'update'
+      );
+
+      expect(updateCall).to.exist;
+      expect(updateCall[2]).to.deep.include({
+        'analytics_storage': 'granted'
+      });
+    });
+
+    it('should update marketing parameters when marketing is accepted', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Accept all cookies
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+      acceptButton.click();
+      await el.updateComplete;
+
+      // Check that gtag was called with updated consent settings
+      const dataLayer = (window as any).dataLayer;
+      const updateCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'update'
+      );
+
+      expect(updateCall).to.exist;
+      expect(updateCall[2]).to.deep.include({
+        'ad_storage': 'granted',
+        'ad_user_data': 'granted',
+        'ad_personalization': 'granted'
+      });
+    });
+
+    it('should keep parameters denied when cookies are rejected', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Reject all cookies
+      const rejectButton = el.shadowRoot!.querySelector('.reject-button') as HTMLButtonElement;
+      rejectButton.click();
+      await el.updateComplete;
+
+      // Check that gtag was called with updated consent settings
+      const dataLayer = (window as any).dataLayer;
+      const updateCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'update'
+      );
+
+      expect(updateCall).to.exist;
+      expect(updateCall[2]).to.deep.include({
+        'ad_storage': 'denied',
+        'analytics_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+
+    it('should update consent parameters based on granular category settings', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Open settings modal
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLButtonElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      // Enable only analytics, disable marketing
+      const analyticsToggle = el.shadowRoot!.querySelector('.category-item[data-category="analytics"] input[type="checkbox"]') as HTMLInputElement;
+      const marketingToggle = el.shadowRoot!.querySelector('.category-item[data-category="marketing"] input[type="checkbox"]') as HTMLInputElement;
+
+      // Click to enable analytics if not already enabled
+      if (!analyticsToggle.checked) {
+        analyticsToggle.click();
+        await el.updateComplete;
+      }
+
+      // Click to disable marketing if currently enabled
+      if (marketingToggle.checked) {
+        marketingToggle.click();
+        await el.updateComplete;
+      }
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Save settings
+      const saveButton = el.shadowRoot!.querySelector('.save-settings-button') as HTMLButtonElement;
+      saveButton.click();
+      await el.updateComplete;
+
+      // Check that gtag was called with updated consent settings
+      const dataLayer = (window as any).dataLayer;
+      const updateCall = dataLayer.find((entry: any[]) =>
+        entry[0] === 'consent' && entry[1] === 'update'
+      );
+
+      expect(updateCall).to.exist;
+      expect(updateCall[2]).to.deep.include({
+        'analytics_storage': 'granted',
+        'ad_storage': 'denied',
+        'ad_user_data': 'denied',
+        'ad_personalization': 'denied'
+      });
+    });
+
+    it('should push consent update event to dataLayer for GTM integration', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Accept all cookies
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+      acceptButton.click();
+      await el.updateComplete;
+
+      // Check that consent_update event was pushed to dataLayer
+      const dataLayer = (window as any).dataLayer;
+      const consentEvent = dataLayer.find((entry: any) =>
+        entry.event === 'consent_update'
+      );
+
+      expect(consentEvent).to.exist;
+      expect(consentEvent.consent_state).to.deep.include({
+        'ad_storage': 'granted',
+        'analytics_storage': 'granted',
+        'ad_user_data': 'granted',
+        'ad_personalization': 'granted'
+      });
+    });
+
+    it('should handle errors gracefully when updating consent parameters', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Mock an error in gtag function
+      (window as any).gtag = () => {
+        throw new Error('Simulated gtag error');
+      };
+
+      let errorThrown = false;
+      try {
+        // Accept all cookies
+        const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+        acceptButton.click();
+        await el.updateComplete;
+
+        // Component should still work normally
+        expect(el.areNonEssentialCookiesAllowed()).to.be.true;
+      } catch (error) {
+        errorThrown = true;
+      }
+
+      expect(errorThrown).to.be.false;
+    });
+
+    it('should update consent parameters immediately after user decision', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Clear initial dataLayer calls
+      (window as any).dataLayer = [];
+
+      // Accept all cookies
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+      acceptButton.click();
+      await el.updateComplete;
+
+      // Check that update happened immediately (should be first call after clearing)
+      const dataLayer = (window as any).dataLayer;
+      expect(dataLayer.length).to.be.greaterThan(0);
+
+      const firstCall = dataLayer[0];
+      expect(firstCall[0]).to.equal('consent');
+      expect(firstCall[1]).to.equal('update');
+    });
+  });
 });

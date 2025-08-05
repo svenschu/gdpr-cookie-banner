@@ -434,6 +434,37 @@ export class GdprCookieBanner extends LitElement {
     return { ...this._googleConsentStatus };
   }
 
+  private _updateGoogleConsentMode(categorySettings: CategorySettings) {
+    try {
+      // Map category settings to Google consent parameters
+      const consentConfig = {
+        'ad_storage': categorySettings.marketing ? 'granted' as const : 'denied' as const,
+        'analytics_storage': categorySettings.analytics ? 'granted' as const : 'denied' as const,
+        'ad_user_data': categorySettings.marketing ? 'granted' as const : 'denied' as const,
+        'ad_personalization': categorySettings.marketing ? 'granted' as const : 'denied' as const
+      };
+
+      // Update Google consent parameters
+      if ((window as any).gtag) {
+        (window as any).gtag('consent', 'update', consentConfig);
+      }
+
+      // Push consent update event to dataLayer for GTM integration
+      if ((window as any).dataLayer) {
+        (window as any).dataLayer.push({
+          'event': 'consent_update',
+          'consent_state': { ...consentConfig }
+        });
+      }
+
+      // Update internal status
+      this._googleConsentStatus = { ...consentConfig };
+    } catch (error) {
+      // Silently handle errors to not affect site functionality
+      console.warn('Google Consent Mode update failed:', error);
+    }
+  }
+
   private _detectLanguageAndRegion() {
     // Detect language
     if (this.language) {
@@ -573,6 +604,17 @@ export class GdprCookieBanner extends LitElement {
     this._nonEssentialCookiesAllowed = true;
     this._showBanner = false;
 
+    // Update category settings for accept all
+    this._categorySettings = {
+      essential: true,
+      functional: true,
+      analytics: true,
+      marketing: true
+    };
+
+    // Update Google Consent Mode parameters
+    this._updateGoogleConsentMode(this._categorySettings);
+
     // Dispatch custom event for external scripts to listen to
     this.dispatchEvent(new CustomEvent('gdpr-consent-given', {
       detail: { accepted: true },
@@ -586,6 +628,17 @@ export class GdprCookieBanner extends LitElement {
     this._consentGiven = true;
     this._nonEssentialCookiesAllowed = false;
     this._showBanner = false;
+
+    // Update category settings for reject all
+    this._categorySettings = {
+      essential: true,
+      functional: false,
+      analytics: false,
+      marketing: false
+    };
+
+    // Update Google Consent Mode parameters
+    this._updateGoogleConsentMode(this._categorySettings);
 
     // Dispatch custom event for external scripts to listen to
     this.dispatchEvent(new CustomEvent('gdpr-consent-given', {
@@ -667,6 +720,9 @@ export class GdprCookieBanner extends LitElement {
     this._nonEssentialCookiesAllowed = hasAnyOptionalCategory;
     this._showBanner = false;
     this._showSettingsModal = false;
+
+    // Update Google Consent Mode parameters
+    this._updateGoogleConsentMode(this._categorySettings);
 
     // Dispatch consent event
     this.dispatchEvent(new CustomEvent('gdpr-consent-given', {
