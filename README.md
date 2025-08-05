@@ -17,7 +17,7 @@ A TypeScript/Lit web component for GDPR-compliant cookie consent management with
 
 - **Story 2.1 - Set Default Consent Status**: Initializes Google Consent Mode with default 'denied' status for all parameters
 - **Story 2.2 - Update and Send Consent Signals**: Updates and transmits consent signals to Google services when user makes choices
-- **Story 2.3 - Configure Basic vs Advanced Mode**: ⚠️ Configuration options available but requires manual setup
+- **Story 2.3 - Configure Basic vs Advanced Mode**: ✅ Configurable basic vs advanced Google Consent Mode with automatic tag loading behavior
 - **Story 2.4 - Integrate with Certified CMP**: ⚠️ Framework ready but requires external CMP integration
 
 ### ❌ Epic 3: Compliance and Audit (NOT IMPLEMENTED)
@@ -63,6 +63,12 @@ A TypeScript/Lit web component for GDPR-compliant cookie consent management with
   user-region="EU" 
   consent-expiration-days="365">
 </gdpr-cookie-banner>
+
+<!-- With Google Consent Mode configuration -->
+<gdpr-cookie-banner 
+  google-consent-mode="basic"
+  consent-expiration-days="365">
+</gdpr-cookie-banner>
 ```
 
 #### Available Attributes
@@ -70,6 +76,22 @@ A TypeScript/Lit web component for GDPR-compliant cookie consent management with
 - `consent-expiration-days`: Consent validity period (30-730 days, default: 365)
 - `language`: Interface language ("en" or "de", auto-detected if not specified)
 - `user-region`: User's region for appropriate banner variant ("EU", "US", auto-detected if not specified)
+- `google-consent-mode`: Google Consent Mode behavior ("basic" or "advanced", default: "advanced")
+
+#### Google Consent Mode Configuration
+
+The component supports both basic and advanced Google Consent Mode V2:
+
+- **Advanced Mode (default)**: Google tags load immediately but send only anonymized pings before consent. Enables conversion modeling and better data quality.
+- **Basic Mode**: Google tags load only after explicit user consent. Maximum privacy but no data about users who don't consent.
+
+```html
+<!-- Basic mode: Maximum privacy, delayed tag loading -->
+<gdpr-cookie-banner google-consent-mode="basic"></gdpr-cookie-banner>
+
+<!-- Advanced mode: Immediate loading with cookieless pings -->
+<gdpr-cookie-banner google-consent-mode="advanced"></gdpr-cookie-banner>
+```
 
 ## Development
 

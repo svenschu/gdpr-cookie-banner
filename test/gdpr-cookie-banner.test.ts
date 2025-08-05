@@ -991,7 +991,57 @@ describe('GdprCookieBanner', () => {
     });
 
     it('should be configurable for basic mode', async () => {
+      // Clear any existing setup
+      (window as any).dataLayer = [];
+      delete (window as any).gtag;
+
       const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner google-consent-mode="basic"></gdpr-cookie-banner>`);
+
+      // In basic mode, gtag should NOT be initialized immediately
+      expect((window as any).gtag).to.be.undefined;
+      expect((window as any).dataLayer).to.be.empty;
+
+      // Verify the component is configured for basic mode
+      expect(el.googleConsentMode).to.equal('basic');
+    });
+
+    it('should delay gtag initialization in basic mode until consent is given', async () => {
+      // Clear any existing setup and stored consent
+      (window as any).dataLayer = [];
+      delete (window as any).gtag;
+      localStorage.removeItem('gdpr-consent');
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner google-consent-mode="basic"></gdpr-cookie-banner>`);
+      await el.updateComplete;
+
+      // In basic mode, gtag should NOT be initialized immediately
+      expect((window as any).gtag).to.be.undefined;
+      expect((window as any).dataLayer).to.be.empty;
+
+      // Banner should be visible for first-time users
+      expect(el.shouldShowBanner()).to.be.true;
+
+      // Simulate user accepting cookies by clicking the accept button
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLButtonElement;
+      expect(acceptButton).to.exist;
+      acceptButton.click();
+      await el.updateComplete;
+
+      // Now gtag should be initialized
+      expect((window as any).gtag).to.be.a('function');
+      expect((window as any).dataLayer).to.not.be.empty;
+    });
+
+    it('should initialize gtag immediately in advanced mode', async () => {
+      // Clear any existing setup
+      (window as any).dataLayer = [];
+      delete (window as any).gtag;
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner google-consent-mode="advanced"></gdpr-cookie-banner>`);
+
+      // In advanced mode, gtag should be initialized immediately
+      expect((window as any).gtag).to.be.a('function');
+      expect((window as any).dataLayer).to.not.be.empty;
 
       const dataLayer = (window as any).dataLayer;
       const consentCall = dataLayer.find((entry: any[]) =>
@@ -999,7 +1049,6 @@ describe('GdprCookieBanner', () => {
       );
 
       expect(consentCall).to.exist;
-      // In basic mode, all parameters should still be denied by default
       expect(consentCall[2]).to.deep.include({
         'ad_storage': 'denied',
         'analytics_storage': 'denied',

@@ -403,6 +403,13 @@ export class GdprCookieBanner extends LitElement {
 
   private _initializeGoogleConsentMode() {
     try {
+      // In basic mode, delay initialization until consent is given
+      if (this.googleConsentMode === 'basic') {
+        // Don't initialize gtag or dataLayer yet in basic mode
+        return;
+      }
+
+      // Advanced mode: Initialize immediately with default denied status
       // Initialize dataLayer if it doesn't exist
       (window as any).dataLayer = (window as any).dataLayer || [];
 
@@ -414,7 +421,7 @@ export class GdprCookieBanner extends LitElement {
       }
 
       // Set default consent status - all parameters denied by default
-      // Both basic and advanced mode start with denied status
+      // Advanced mode starts with denied status but allows cookieless pings
       const consentConfig = {
         'ad_storage': 'denied',
         'analytics_storage': 'denied',
@@ -427,6 +434,26 @@ export class GdprCookieBanner extends LitElement {
     } catch (error) {
       // Silently handle errors to not affect site functionality
       console.warn('Google Consent Mode initialization failed:', error);
+    }
+  }
+
+  private _initializeGoogleConsentModeForBasic() {
+    try {
+      // Initialize dataLayer if it doesn't exist
+      (window as any).dataLayer = (window as any).dataLayer || [];
+
+      // Initialize gtag function if it doesn't exist
+      if (!(window as any).gtag) {
+        (window as any).gtag = function() {
+          (window as any).dataLayer.push(arguments);
+        };
+      }
+
+      // In basic mode, we initialize gtag only when consent is given
+      // No default consent call needed since tags load only after consent
+    } catch (error) {
+      // Silently handle errors to not affect site functionality
+      console.warn('Google Consent Mode basic initialization failed:', error);
     }
   }
 
@@ -612,6 +639,11 @@ export class GdprCookieBanner extends LitElement {
       marketing: true
     };
 
+    // Initialize Google Consent Mode for basic mode (if needed)
+    if (this.googleConsentMode === 'basic') {
+      this._initializeGoogleConsentModeForBasic();
+    }
+
     // Update Google Consent Mode parameters
     this._updateGoogleConsentMode(this._categorySettings);
 
@@ -636,6 +668,11 @@ export class GdprCookieBanner extends LitElement {
       analytics: false,
       marketing: false
     };
+
+    // Initialize Google Consent Mode for basic mode (if needed)
+    if (this.googleConsentMode === 'basic') {
+      this._initializeGoogleConsentModeForBasic();
+    }
 
     // Update Google Consent Mode parameters
     this._updateGoogleConsentMode(this._categorySettings);
@@ -720,6 +757,11 @@ export class GdprCookieBanner extends LitElement {
     this._nonEssentialCookiesAllowed = hasAnyOptionalCategory;
     this._showBanner = false;
     this._showSettingsModal = false;
+
+    // Initialize Google Consent Mode for basic mode (if needed)
+    if (this.googleConsentMode === 'basic') {
+      this._initializeGoogleConsentModeForBasic();
+    }
 
     // Update Google Consent Mode parameters
     this._updateGoogleConsentMode(this._categorySettings);
