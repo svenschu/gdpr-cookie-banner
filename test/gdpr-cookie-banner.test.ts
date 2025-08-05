@@ -357,4 +357,203 @@ describe('GdprCookieBanner', () => {
       expect(el.shadowRoot!.querySelector('.banner')).to.exist;
     });
   });
+
+  describe('Story 1.3 - Granular Cookie Settings', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('should show settings modal when settings button is clicked', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const settingsModal = el.shadowRoot!.querySelector('.settings-modal');
+      expect(settingsModal).to.exist;
+    });
+
+    it('should have all four cookie categories defined', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const essentialToggle = el.shadowRoot!.querySelector('[data-category="essential"]');
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"]');
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"]');
+      const marketingToggle = el.shadowRoot!.querySelector('[data-category="marketing"]');
+
+      expect(essentialToggle).to.exist;
+      expect(functionalToggle).to.exist;
+      expect(analyticsToggle).to.exist;
+      expect(marketingToggle).to.exist;
+    });
+
+    it('should have essential cookies always enabled and disabled toggle', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const essentialToggle = el.shadowRoot!.querySelector('[data-category="essential"] input') as HTMLInputElement;
+      expect(essentialToggle.checked).to.be.true;
+      expect(essentialToggle.disabled).to.be.true;
+    });
+
+    it('should have all optional categories disabled by default', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+      const marketingToggle = el.shadowRoot!.querySelector('[data-category="marketing"] input') as HTMLInputElement;
+
+      expect(functionalToggle.checked).to.be.false;
+      expect(analyticsToggle.checked).to.be.false;
+      expect(marketingToggle.checked).to.be.false;
+    });
+
+    it('should allow individual category activation', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      functionalToggle.click();
+      await el.updateComplete;
+
+      expect(functionalToggle.checked).to.be.true;
+      expect(el.isCategoryEnabled('functional')).to.be.true;
+    });
+
+    it('should persist category settings in localStorage', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+
+      functionalToggle.click();
+      analyticsToggle.click();
+      await el.updateComplete;
+
+      const saveButton = el.shadowRoot!.querySelector('.save-settings-button') as HTMLElement;
+      saveButton.click();
+      await el.updateComplete;
+
+      const consent = JSON.parse(localStorage.getItem('gdpr-consent') || '{}');
+      expect(consent.categories.functional).to.be.true;
+      expect(consent.categories.analytics).to.be.true;
+      expect(consent.categories.marketing).to.be.false;
+    });
+
+    it('should load persisted category settings on initialization', async () => {
+      // Pre-populate localStorage with granular consent
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: true,
+          analytics: false,
+          marketing: true
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el.isCategoryEnabled('essential')).to.be.true;
+      expect(el.isCategoryEnabled('functional')).to.be.true;
+      expect(el.isCategoryEnabled('analytics')).to.be.false;
+      expect(el.isCategoryEnabled('marketing')).to.be.true;
+    });
+
+    it('should dispatch category change events when categories are toggled', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      let categoryChangeEvent: CustomEvent | null = null;
+      el.addEventListener('gdpr-category-changed', (e: Event) => {
+        categoryChangeEvent = e as CustomEvent;
+      });
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      functionalToggle.click();
+      await el.updateComplete;
+
+      expect(categoryChangeEvent).to.not.be.null;
+      expect(categoryChangeEvent!.detail.category).to.equal('functional');
+      expect(categoryChangeEvent!.detail.enabled).to.be.true;
+    });
+
+    it('should have descriptions for each category', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const essentialDesc = el.shadowRoot!.querySelector('[data-category="essential"] .category-description');
+      const functionalDesc = el.shadowRoot!.querySelector('[data-category="functional"] .category-description');
+      const analyticsDesc = el.shadowRoot!.querySelector('[data-category="analytics"] .category-description');
+      const marketingDesc = el.shadowRoot!.querySelector('[data-category="marketing"] .category-description');
+
+      expect(essentialDesc).to.exist;
+      expect(functionalDesc).to.exist;
+      expect(analyticsDesc).to.exist;
+      expect(marketingDesc).to.exist;
+
+      expect(essentialDesc!.textContent).to.include('necessary');
+      expect(functionalDesc!.textContent).to.include('improve');
+      expect(analyticsDesc!.textContent).to.include('anonymized');
+      expect(marketingDesc!.textContent).to.include('advertising');
+    });
+
+    it('should have "More info" links for each category', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      const moreInfoLinks = el.shadowRoot!.querySelectorAll('.more-info-link');
+      expect(moreInfoLinks.length).to.equal(4);
+
+      moreInfoLinks.forEach(link => {
+        expect(link.textContent).to.include('More info');
+      });
+    });
+
+    it('should close settings modal when save button is clicked', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector('.settings-modal')).to.exist;
+
+      const saveButton = el.shadowRoot!.querySelector('.save-settings-button') as HTMLElement;
+      saveButton.click();
+      await el.updateComplete;
+
+      expect(el.shadowRoot!.querySelector('.settings-modal')).to.not.exist;
+      expect(el.shouldShowBanner()).to.be.false;
+    });
+  });
 });
