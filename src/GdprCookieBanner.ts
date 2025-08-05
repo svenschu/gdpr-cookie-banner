@@ -69,22 +69,25 @@ export class GdprCookieBanner extends LitElement {
       min-width: 100px;
     }
 
-    .accept-button {
-      background: #1e8449;
-      color: white;
-    }
-
-    .accept-button:hover {
-      background: #196f3d;
-    }
-
+    .accept-button,
     .reject-button {
-      background: #c0392b;
+      background: #34495e;
       color: white;
     }
 
+    .accept-button:hover,
     .reject-button:hover {
-      background: #a93226;
+      background: #2c3e50;
+    }
+
+    .settings-button {
+      background: transparent;
+      color: white;
+      border: 1px solid #bdc3c7;
+    }
+
+    .settings-button:hover {
+      background: #34495e;
     }
 
     .banner-button:focus {
@@ -215,6 +218,14 @@ export class GdprCookieBanner extends LitElement {
     }));
   }
 
+  private _handleSettings() {
+    // Dispatch custom event for external scripts to listen to
+    this.dispatchEvent(new CustomEvent('gdpr-settings-requested', {
+      bubbles: true,
+      composed: true
+    }));
+  }
+
   // Public API methods for external use
   shouldShowBanner(): boolean {
     return this._showBanner;
@@ -258,14 +269,21 @@ export class GdprCookieBanner extends LitElement {
               @click=${this._handleAccept}
               aria-label="Accept all cookies"
             >
-              Accept
+              Accept All
             </button>
             <button
               class="banner-button reject-button"
               @click=${this._handleReject}
               aria-label="Reject non-essential cookies"
             >
-              Reject
+              Reject All
+            </button>
+            <button
+              class="banner-button settings-button"
+              @click=${this._handleSettings}
+              aria-label="Open cookie settings"
+            >
+              Settings
             </button>
           </div>
         </div>

@@ -278,4 +278,83 @@ describe('GdprCookieBanner', () => {
 
     await expect(el).shadowDom.to.be.accessible();
   });
+
+  describe('Story 1.2 - Equivalent Accept All and Reject All Buttons', () => {
+    beforeEach(() => {
+      localStorage.clear();
+    });
+
+    it('should have three buttons: Accept All, Reject All, and Settings', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button');
+      const rejectButton = el.shadowRoot!.querySelector('.reject-button');
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button');
+
+      expect(acceptButton).to.exist;
+      expect(rejectButton).to.exist;
+      expect(settingsButton).to.exist;
+    });
+
+    it('should have equivalent styling for Accept All and Reject All buttons', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLElement;
+      const rejectButton = el.shadowRoot!.querySelector('.reject-button') as HTMLElement;
+
+      const acceptStyles = window.getComputedStyle(acceptButton);
+      const rejectStyles = window.getComputedStyle(rejectButton);
+
+      // Both buttons should have the same background color (no nudging)
+      expect(acceptStyles.backgroundColor).to.equal(rejectStyles.backgroundColor);
+
+      // Both buttons should have the same dimensions (allowing for small browser rendering differences)
+      const acceptWidth = parseFloat(acceptStyles.width);
+      const rejectWidth = parseFloat(rejectStyles.width);
+      expect(Math.abs(acceptWidth - rejectWidth)).to.be.lessThan(2); // Allow 2px difference for browser rendering
+      expect(acceptStyles.height).to.equal(rejectStyles.height);
+      expect(acceptStyles.padding).to.equal(rejectStyles.padding);
+
+      // Both buttons should have the same font styling
+      expect(acceptStyles.fontSize).to.equal(rejectStyles.fontSize);
+      expect(acceptStyles.fontWeight).to.equal(rejectStyles.fontWeight);
+    });
+
+    it('should have correct button labels', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const acceptButton = el.shadowRoot!.querySelector('.accept-button') as HTMLElement;
+      const rejectButton = el.shadowRoot!.querySelector('.reject-button') as HTMLElement;
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+
+      expect(acceptButton.textContent?.trim()).to.equal('Accept All');
+      expect(rejectButton.textContent?.trim()).to.equal('Reject All');
+      expect(settingsButton.textContent?.trim()).to.equal('Settings');
+    });
+
+    it('should dispatch settings event when Settings button is clicked', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      let settingsEventFired = false;
+      el.addEventListener('gdpr-settings-requested', () => {
+        settingsEventFired = true;
+      });
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+
+      expect(settingsEventFired).to.be.true;
+    });
+
+    it('should keep banner visible after Settings button click', async () => {
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLElement;
+      settingsButton.click();
+
+      // Banner should still be visible after clicking Settings
+      expect(el.shouldShowBanner()).to.be.true;
+      expect(el.shadowRoot!.querySelector('.banner')).to.exist;
+    });
+  });
 });
