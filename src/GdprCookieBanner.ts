@@ -307,7 +307,58 @@ export class GdprCookieBanner extends LitElement {
   @property({ type: Number, attribute: 'consent-expiration-days' })
   consentExpirationDays: number = 365; // Default 12 months
 
+  @property({ type: String })
+  language: string = '';
+
+  @property({ type: String, attribute: 'user-region' })
+  userRegion: string = '';
+
+  @property({ type: Boolean, attribute: 'geolocation-error' })
+  geolocationError: boolean = false;
+
   private readonly CONSENT_KEY = 'gdpr-consent';
+
+  private _currentLanguage: string = 'en';
+  private _currentRegion: string = 'EU';
+
+  private readonly translations = {
+    en: {
+      bannerTitle: 'Cookie Consent',
+      bannerDescription: 'We use cookies to enhance your browsing experience and analyze our traffic. By clicking "Accept", you consent to our use of cookies. You can choose to reject non-essential cookies.',
+      bannerDescriptionUS: 'We use cookies to enhance your browsing experience and analyze our traffic. By clicking "Accept", you consent to our use of cookies. Do Not Sell My Personal Information.',
+      acceptAll: 'Accept All',
+      rejectAll: 'Reject All',
+      settings: 'Settings',
+      settingsTitle: 'Cookie Settings',
+      settingsDescription: 'Choose which cookies you want to allow. You can change these settings at any time.',
+      saveSettings: 'Save Settings',
+      cookieSettings: 'Cookie Settings',
+      categories: {
+        essential: { name: 'Essential Cookies', description: 'These cookies are necessary for basic website functionality and cannot be disabled.' },
+        functional: { name: 'Functional Cookies', description: 'These cookies improve user experience but are not essential for the website to function.' },
+        analytics: { name: 'Analytics Cookies', description: 'These cookies collect anonymized data about website usage to help us improve our services.' },
+        marketing: { name: 'Marketing Cookies', description: 'These cookies enable personalized advertising and tracking across websites.' }
+      }
+    },
+    de: {
+      bannerTitle: 'Cookie-Einverständnis',
+      bannerDescription: 'Wir verwenden Cookies, um Ihr Browsing-Erlebnis zu verbessern und unseren Traffic zu analysieren. Durch Klicken auf "Alle akzeptieren" stimmen Sie der Verwendung von Cookies zu. Sie können nicht-essenzielle Cookies ablehnen.',
+      bannerDescriptionUS: 'Wir verwenden Cookies, um Ihr Browsing-Erlebnis zu verbessern und unseren Traffic zu analysieren. Sie können dem Verkauf Ihrer persönlichen Daten widersprechen. Verkaufen Sie meine persönlichen Daten nicht.',
+      acceptAll: 'Alle akzeptieren',
+      rejectAll: 'Alle ablehnen',
+      settings: 'Einstellungen',
+      settingsTitle: 'Cookie-Einstellungen',
+      settingsDescription: 'Wählen Sie, welche Cookies Sie zulassen möchten. Sie können diese Einstellungen jederzeit ändern.',
+      saveSettings: 'Einstellungen speichern',
+      cookieSettings: 'Cookie-Einstellungen',
+      categories: {
+        essential: { name: 'Essenzielle Cookies', description: 'Diese Cookies sind für die grundlegende Website-Funktionalität erforderlich und können nicht deaktiviert werden.' },
+        functional: { name: 'Funktional', description: 'Diese Cookies verbessern die Benutzererfahrung, sind aber nicht essentiell für die Website-Funktion.' },
+        analytics: { name: 'Analytik', description: 'Diese Cookies sammeln anonymisierte Daten über die Website-Nutzung, um unsere Dienste zu verbessern.' },
+        marketing: { name: 'Marketing', description: 'Diese Cookies ermöglichen personalisierte Werbung und Tracking über Websites hinweg.' }
+      }
+    }
+  };
 
   private readonly categoryInfo: Record<CookieCategory, CategoryInfo> = {
     essential: {
@@ -334,7 +385,62 @@ export class GdprCookieBanner extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    this._detectLanguageAndRegion();
     this._initializeConsent();
+  }
+
+  private _detectLanguageAndRegion() {
+    // Detect language
+    if (this.language) {
+      this._currentLanguage = this.language;
+    } else {
+      // Auto-detect browser language
+      const browserLang = navigator.language || navigator.languages?.[0] || 'en';
+      const langCode = browserLang.split('-')[0]; // Extract language code (e.g., 'de' from 'de-DE')
+
+      // Check if we support this language, fallback to English if not
+      this._currentLanguage = this.translations[langCode as keyof typeof this.translations] ? langCode : 'en';
+    }
+
+    // Detect region
+    if (this.userRegion) {
+      this._currentRegion = this.userRegion;
+    } else if (this.geolocationError) {
+      // Fallback to GDPR (strictest) on geolocation error
+      this._currentRegion = 'EU';
+    } else {
+      // Default to EU for GDPR compliance
+      this._currentRegion = 'EU';
+    }
+  }
+
+  private _translate(key: string): string {
+    const lang = this._currentLanguage as keyof typeof this.translations;
+    const translations = this.translations[lang] || this.translations.en;
+
+    // Handle nested keys like 'categories.functional.name'
+    const keys = key.split('.');
+    let value: any = translations;
+    for (const k of keys) {
+      value = value?.[k];
+    }
+
+    return value || key;
+  }
+
+  private _getBannerDescription(): string {
+    if (this._currentRegion === 'US') {
+      return this._translate('bannerDescriptionUS');
+    }
+    return this._translate('bannerDescription');
+  }
+
+  private _getCategoryInfo(category: CookieCategory): CategoryInfo {
+    return {
+      name: this._translate(`categories.${category}.name`),
+      description: this._translate(`categories.${category}.description`),
+      required: this.categoryInfo[category].required
+    };
   }
 
   private _initializeConsent() {
@@ -504,6 +610,9 @@ export class GdprCookieBanner extends LitElement {
   }
 
   private _handleSaveSettings() {
+    // Delete cookies for disabled categories before saving new settings
+    this._deleteCookiesForDisabledCategories();
+
     const hasAnyOptionalCategory = this._categorySettings.functional ||
                                    this._categorySettings.analytics ||
                                    this._categorySettings.marketing;
@@ -525,6 +634,46 @@ export class GdprCookieBanner extends LitElement {
     }));
   }
 
+  private _deleteCookiesForDisabledCategories() {
+    // Define cookie patterns by category
+    const cookiePatterns = {
+      functional: ['_func', 'functional'],
+      analytics: ['_ga', '_gid', '_gat', '_gtag', 'analytics'],
+      marketing: ['_fbp', '_fbc', 'marketing', 'ads']
+    };
+
+    // Delete cookies for each disabled category
+    Object.entries(this._categorySettings).forEach(([category, enabled]) => {
+      if (!enabled && category !== 'essential') {
+        const patterns = cookiePatterns[category as keyof typeof cookiePatterns];
+        if (patterns) {
+          this._deleteCookiesByPatterns(patterns);
+        }
+      }
+    });
+  }
+
+  private _deleteCookiesByPatterns(patterns: string[]) {
+    // Get all cookies
+    const cookies = document.cookie.split(';');
+
+    cookies.forEach(cookie => {
+      const cookieName = cookie.split('=')[0].trim();
+
+      // Check if cookie matches any pattern for this category
+      const shouldDelete = patterns.some(pattern =>
+        cookieName.includes(pattern) || cookieName.startsWith(pattern)
+      );
+
+      if (shouldDelete) {
+        // Delete cookie by setting expiration date in the past
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=${window.location.hostname};`;
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/; domain=.${window.location.hostname};`;
+      }
+    });
+  }
+
   private _storeConsentWithCategories(accepted: boolean) {
     const consent: ConsentData = {
       timestamp: Date.now(),
@@ -540,13 +689,10 @@ export class GdprCookieBanner extends LitElement {
   }
 
   render() {
-    if (!this._showBanner && !this._showSettingsModal) {
-      return html``;
-    }
-
     return html`
       ${this._showBanner ? this._renderBanner() : ''}
       ${this._showSettingsModal ? this._renderSettingsModal() : ''}
+      ${this._renderPermanentAccessibilityElement()}
     `;
   }
 
@@ -555,11 +701,9 @@ export class GdprCookieBanner extends LitElement {
       <div class="banner" role="dialog" aria-labelledby="banner-title" aria-describedby="banner-description">
         <div class="banner-content">
           <div class="banner-text">
-            <h2 id="banner-title" class="banner-title">Cookie Consent</h2>
+            <h2 id="banner-title" class="banner-title">${this._translate('bannerTitle')}</h2>
             <p id="banner-description" class="banner-description">
-              We use cookies to enhance your browsing experience and analyze our traffic.
-              By clicking "Accept", you consent to our use of cookies.
-              You can choose to reject non-essential cookies.
+              ${this._getBannerDescription()}
             </p>
           </div>
           <div class="banner-actions">
@@ -568,21 +712,21 @@ export class GdprCookieBanner extends LitElement {
               @click=${this._handleAccept}
               aria-label="Accept all cookies"
             >
-              Accept All
+              ${this._translate('acceptAll')}
             </button>
             <button
               class="banner-button reject-button"
               @click=${this._handleReject}
               aria-label="Reject non-essential cookies"
             >
-              Reject All
+              ${this._translate('rejectAll')}
             </button>
             <button
               class="banner-button settings-button"
               @click=${this._handleSettings}
               aria-label="Open cookie settings"
             >
-              Settings
+              ${this._translate('settings')}
             </button>
           </div>
         </div>
@@ -594,14 +738,14 @@ export class GdprCookieBanner extends LitElement {
     return html`
       <div class="settings-modal" role="dialog" aria-labelledby="settings-title">
         <div class="settings-content">
-          <h2 id="settings-title" class="settings-title">Cookie Settings</h2>
+          <h2 id="settings-title" class="settings-title">${this._translate('settingsTitle')}</h2>
           <p class="settings-description">
-            Choose which cookies you want to allow. You can change these settings at any time.
+            ${this._translate('settingsDescription')}
           </p>
 
           <div class="categories-list">
             ${Object.entries(this.categoryInfo).map(([category, info]) =>
-              this._renderCategoryItem(category as CookieCategory, info)
+              this._renderCategoryItem(category as CookieCategory, this._getCategoryInfo(category as CookieCategory))
             )}
           </div>
 
@@ -611,12 +755,41 @@ export class GdprCookieBanner extends LitElement {
               @click=${this._handleSaveSettings}
               aria-label="Save cookie settings"
             >
-              Save Settings
+              ${this._translate('saveSettings')}
             </button>
           </div>
         </div>
       </div>
     `;
+  }
+
+  private _renderPermanentAccessibilityElement() {
+    // Only show permanent element when banner is not visible (consent has been given)
+    if (this._showBanner) {
+      return html``;
+    }
+
+    return html`
+      <div class="cookie-settings-container">
+        <button
+          class="cookie-settings-link"
+          @click=${this._handleSettings}
+          @keydown=${this._handleKeydown}
+          tabindex="0"
+          role="button"
+          aria-label="Open cookie settings to change your preferences"
+        >
+          ${this._translate('cookieSettings')}
+        </button>
+      </div>
+    `;
+  }
+
+  private _handleKeydown(e: KeyboardEvent) {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      this._handleSettings();
+    }
   }
 
   private _renderCategoryItem(category: CookieCategory, info: CategoryInfo) {

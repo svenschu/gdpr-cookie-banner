@@ -10,6 +10,12 @@ describe('GdprCookieBanner', () => {
     document.cookie.split(";").forEach(function(c) {
       document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
     });
+
+    // Reset navigator.language to English to prevent test interference
+    Object.defineProperty(navigator, 'language', {
+      writable: true,
+      value: 'en-US'
+    });
   });
 
   describe('Story 1.1 - Display banner and block cookies', () => {
@@ -554,6 +560,366 @@ describe('GdprCookieBanner', () => {
 
       expect(el.shadowRoot!.querySelector('.settings-modal')).to.not.exist;
       expect(el.shouldShowBanner()).to.be.false;
+    });
+  });
+
+  describe('Story 1.4 - Withdraw and Change Preferences', () => {
+    beforeEach(() => {
+      localStorage.clear();
+      // Clear all cookies
+      document.cookie.split(";").forEach(function(c) {
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+    });
+
+    it('should render a permanent accessibility element for cookie settings', async () => {
+      // Set up existing consent so banner is hidden
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: true,
+          analytics: true,
+          marketing: false
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Should have a permanent cookie settings link/button
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link');
+      expect(cookieSettingsElement).to.exist;
+      expect(cookieSettingsElement!.textContent).to.include('Cookie Settings');
+    });
+
+    it('should make permanent accessibility element keyboard accessible', async () => {
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      expect(cookieSettingsElement).to.exist;
+      expect(cookieSettingsElement.tabIndex).to.equal(0);
+      expect(cookieSettingsElement.getAttribute('role')).to.equal('button');
+    });
+
+    it('should open preferences modal when permanent element is clicked', async () => {
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: true,
+          analytics: false,
+          marketing: false
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      cookieSettingsElement.click();
+      await el.updateComplete;
+
+      const settingsModal = el.shadowRoot!.querySelector('.settings-modal');
+      expect(settingsModal).to.exist;
+    });
+
+    it('should display current consent status in withdrawal interface', async () => {
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: true,
+          analytics: false,
+          marketing: true
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      cookieSettingsElement.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+      const marketingToggle = el.shadowRoot!.querySelector('[data-category="marketing"] input') as HTMLInputElement;
+
+      expect(functionalToggle.checked).to.be.true;
+      expect(analyticsToggle.checked).to.be.false;
+      expect(marketingToggle.checked).to.be.true;
+    });
+
+    it('should delete cookies immediately when category is deactivated', async () => {
+      // Set up initial consent with analytics enabled
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: false,
+          analytics: true,
+          marketing: false
+        }
+      }));
+
+      // Set some test cookies for analytics category
+      document.cookie = '_ga=test_analytics_cookie; path=/';
+      document.cookie = '_gid=test_analytics_cookie2; path=/';
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Verify cookies exist initially
+      expect(document.cookie).to.include('_ga=test_analytics_cookie');
+      expect(document.cookie).to.include('_gid=test_analytics_cookie2');
+
+      // Open settings and disable analytics
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      cookieSettingsElement.click();
+      await el.updateComplete;
+
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+      analyticsToggle.click();
+      await el.updateComplete;
+
+      const saveButton = el.shadowRoot!.querySelector('.save-settings-button') as HTMLElement;
+      saveButton.click();
+      await el.updateComplete;
+
+      // Analytics cookies should be deleted
+      expect(document.cookie).to.not.include('_ga=test_analytics_cookie');
+      expect(document.cookie).to.not.include('_gid=test_analytics_cookie2');
+    });
+
+    it('should persist changed settings and respect them on return visits', async () => {
+      // Initial consent
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: false,
+          analytics: true,
+          marketing: false
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      // Change settings
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      cookieSettingsElement.click();
+      await el.updateComplete;
+
+      const functionalToggle = el.shadowRoot!.querySelector('[data-category="functional"] input') as HTMLInputElement;
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+
+      functionalToggle.click(); // Enable functional
+      analyticsToggle.click(); // Disable analytics
+      await el.updateComplete;
+
+      const saveButton = el.shadowRoot!.querySelector('.save-settings-button') as HTMLElement;
+      saveButton.click();
+      await el.updateComplete;
+
+      // Create new instance to simulate return visit
+      const el2 = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      expect(el2.isCategoryEnabled('functional')).to.be.true;
+      expect(el2.isCategoryEnabled('analytics')).to.be.false;
+    });
+
+    it('should dispatch events when categories are changed via withdrawal interface', async () => {
+      localStorage.setItem('gdpr-consent', JSON.stringify({
+        timestamp: Date.now(),
+        accepted: true,
+        categories: {
+          essential: true,
+          functional: true,
+          analytics: true,
+          marketing: false
+        }
+      }));
+
+      const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+      let categoryChangeEvent: CustomEvent | null = null;
+      el.addEventListener('gdpr-category-changed', (e: Event) => {
+        categoryChangeEvent = e as CustomEvent;
+      });
+
+      const cookieSettingsElement = el.shadowRoot!.querySelector('.cookie-settings-link') as HTMLElement;
+      cookieSettingsElement.click();
+      await el.updateComplete;
+
+      const analyticsToggle = el.shadowRoot!.querySelector('[data-category="analytics"] input') as HTMLInputElement;
+      analyticsToggle.click();
+      await el.updateComplete;
+
+      expect(categoryChangeEvent).to.not.be.null;
+      expect(categoryChangeEvent!.detail.category).to.equal('analytics');
+      expect(categoryChangeEvent!.detail.enabled).to.be.false;
+    });
+  });
+
+  describe('Story 1.5 - Multilingual and Geo-targeting', () => {
+    describe('Geo-targeting functionality', () => {
+      it('should detect EU/EEA IP addresses and show GDPR banner', async () => {
+        // Mock geolocation service to return EU country
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner user-region="EU"></gdpr-cookie-banner>`);
+
+        expect(el.shouldShowBanner()).to.be.true;
+        expect(el.shadowRoot!.querySelector('.banner')).to.exist;
+        // Should show GDPR-compliant banner with all required elements
+        expect(el.shadowRoot!.querySelector('.accept-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.reject-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.settings-button')).to.exist;
+      });
+
+      it('should show different banner for US visitors', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner user-region="US"></gdpr-cookie-banner>`);
+
+        expect(el.shouldShowBanner()).to.be.true;
+        // US banner should have different content/structure
+        const bannerText = el.shadowRoot!.querySelector('.banner-description')?.textContent;
+        expect(bannerText).to.include('Do Not Sell My Personal Information');
+      });
+
+      it('should fallback to GDPR banner when region is uncertain', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner user-region="UNKNOWN"></gdpr-cookie-banner>`);
+
+        expect(el.shouldShowBanner()).to.be.true;
+        // Should show strictest (GDPR) banner as fallback
+        expect(el.shadowRoot!.querySelector('.accept-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.reject-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.settings-button')).to.exist;
+      });
+
+      it('should handle geolocation service errors gracefully', async () => {
+        // Mock geolocation service failure
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner geolocation-error="true"></gdpr-cookie-banner>`);
+
+        expect(el.shouldShowBanner()).to.be.true;
+        // Should fallback to GDPR banner on error
+        expect(el.shadowRoot!.querySelector('.banner')).to.exist;
+      });
+    });
+
+    describe('Multilingual functionality', () => {
+      it('should display banner in German when language is set to "de"', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner language="de"></gdpr-cookie-banner>`);
+
+        const bannerTitle = el.shadowRoot!.querySelector('.banner-title')?.textContent;
+        const acceptButton = el.shadowRoot!.querySelector('.accept-button')?.textContent;
+        const rejectButton = el.shadowRoot!.querySelector('.reject-button')?.textContent;
+        const settingsButton = el.shadowRoot!.querySelector('.settings-button')?.textContent;
+
+        expect(bannerTitle).to.equal('Cookie-Einverständnis');
+        expect(acceptButton).to.include('Alle akzeptieren');
+        expect(rejectButton).to.include('Alle ablehnen');
+        expect(settingsButton).to.include('Einstellungen');
+      });
+
+      it('should display banner in English when language is set to "en"', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner language="en"></gdpr-cookie-banner>`);
+
+        const bannerTitle = el.shadowRoot!.querySelector('.banner-title')?.textContent;
+        const acceptButton = el.shadowRoot!.querySelector('.accept-button')?.textContent;
+        const rejectButton = el.shadowRoot!.querySelector('.reject-button')?.textContent;
+        const settingsButton = el.shadowRoot!.querySelector('.settings-button')?.textContent;
+
+        expect(bannerTitle).to.equal('Cookie Consent');
+        expect(acceptButton).to.include('Accept All');
+        expect(rejectButton).to.include('Reject All');
+        expect(settingsButton).to.include('Settings');
+      });
+
+      it('should auto-detect browser language and use appropriate translation', async () => {
+        // Mock browser language to German
+        Object.defineProperty(navigator, 'language', {
+          writable: true,
+          value: 'de-DE'
+        });
+
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner></gdpr-cookie-banner>`);
+
+        const bannerTitle = el.shadowRoot!.querySelector('.banner-title')?.textContent;
+        expect(bannerTitle).to.equal('Cookie-Einverständnis');
+      });
+
+      it('should fallback to English for unsupported languages', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner language="fr"></gdpr-cookie-banner>`);
+
+        const bannerTitle = el.shadowRoot!.querySelector('.banner-title')?.textContent;
+        const acceptButton = el.shadowRoot!.querySelector('.accept-button')?.textContent;
+
+        expect(bannerTitle).to.equal('Cookie Consent');
+        expect(acceptButton).to.include('Accept All');
+      });
+
+      it('should translate settings modal content', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner language="de"></gdpr-cookie-banner>`);
+
+        const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLButtonElement;
+        settingsButton.click();
+        await el.updateComplete;
+
+        const settingsTitle = el.shadowRoot!.querySelector('.settings-title')?.textContent;
+        const saveButton = el.shadowRoot!.querySelector('.save-settings-button')?.textContent;
+
+        expect(settingsTitle).to.equal('Cookie-Einstellungen');
+        expect(saveButton).to.include('Einstellungen speichern');
+      });
+
+      it('should translate category names and descriptions', async () => {
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner language="de"></gdpr-cookie-banner>`);
+
+        const settingsButton = el.shadowRoot!.querySelector('.settings-button') as HTMLButtonElement;
+        settingsButton.click();
+        await el.updateComplete;
+
+        const functionalCategory = el.shadowRoot!.querySelector('[data-category="functional"] .category-name')?.textContent;
+        const analyticsCategory = el.shadowRoot!.querySelector('[data-category="analytics"] .category-name')?.textContent;
+
+        expect(functionalCategory).to.equal('Funktional');
+        expect(analyticsCategory).to.equal('Analytik');
+      });
+    });
+
+    describe('Combined geo-targeting and multilingual functionality', () => {
+      it('should show German GDPR banner for German IP addresses', async () => {
+        // Mock German IP and browser language
+        Object.defineProperty(navigator, 'language', {
+          writable: true,
+          value: 'de-DE'
+        });
+
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner user-region="DE"></gdpr-cookie-banner>`);
+
+        const bannerTitle = el.shadowRoot!.querySelector('.banner-title')?.textContent;
+        expect(bannerTitle).to.equal('Cookie-Einverständnis');
+        expect(el.shadowRoot!.querySelector('.accept-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.reject-button')).to.exist;
+        expect(el.shadowRoot!.querySelector('.settings-button')).to.exist;
+      });
+
+      it('should show English US banner for US IP addresses', async () => {
+        Object.defineProperty(navigator, 'language', {
+          writable: true,
+          value: 'en-US'
+        });
+
+        const el = await fixture<GdprCookieBanner>(html`<gdpr-cookie-banner user-region="US"></gdpr-cookie-banner>`);
+
+        const bannerText = el.shadowRoot!.querySelector('.banner-description')?.textContent;
+        expect(bannerText).to.include('Do Not Sell My Personal Information');
+      });
     });
   });
 });
